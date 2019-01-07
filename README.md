@@ -4,7 +4,7 @@
 
 ### currently under development!
 
-#### Features:
+#### Features by now:
 
 - raymarching into volume of 3d noise data
 - raymarch toward sun for selfshadow approximation
