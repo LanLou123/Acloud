@@ -62,7 +62,6 @@ enum class RenderLayer : int
 	Opaque = 0,
 	Transparent,
 	AlphaTested,
-	GpuWaves,
 	Land,
 	volume,
 	Count
