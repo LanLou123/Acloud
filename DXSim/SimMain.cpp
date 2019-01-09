@@ -3,7 +3,6 @@
 #include "./Common/UploadBuffer.h"
 #include "./Common/GeometryGenerator.h"
 #include "FrameResource.h"
-#include "GpuWaves.h"
 
 #include "./imgui/imgui.h"
 #include "./imgui/imgui_impl_dx12.h"
@@ -116,11 +115,9 @@ private:
 	void UpdateObjectCBs(const GameTimer& gt);
 	void UpdateMaterialCBs(const GameTimer& gt);
 	void UpdateMainPassCB(const GameTimer& gt);
-	void UpdateWavesGPU(const GameTimer& gt);
 
 	void LoadTextures();
 	void BuildRootSignature();
-	void BuildWavesRootSignature();
 	void BuildDescriptorHeaps();
 	void BuildShadersAndInputLayout();
 	void BuildLandGeometry();
@@ -177,7 +174,7 @@ private:
 	// Render items divided by PSO.
 	std::vector<RenderItem*> mRitemLayer[(int)RenderLayer::Count];
 
-	std::unique_ptr<GpuWaves> mWaves;
+
 
 	PassConstants mMainPassCB;
 
@@ -282,18 +279,12 @@ bool SimMain::Initialize()
 	// so we have to query this information.
 	mCbvSrvDescriptorSize = md3dDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-	mWaves = std::make_unique<GpuWaves>(
-		md3dDevice.Get(),
-		mCommandList.Get(),
-		256, 256, 0.25f, 0.03f, 2.0f, 0.2f);
 
 	LoadTextures();
 	BuildRootSignature();
-	BuildWavesRootSignature();
 	BuildDescriptorHeaps();
 	BuildShadersAndInputLayout();
 	BuildLandGeometry();
-	BuildWavesGeometry();
 	BuildBoxGeometry();
 	BuildSphereGeometry();
 	BuildMaterials();
@@ -387,7 +378,6 @@ void SimMain::Draw(const GameTimer& gt)
 	auto passCB = mCurrFrameResource->PassCB->Resource();
 	mCommandList->SetGraphicsRootConstantBufferView(2, passCB->GetGPUVirtualAddress());
 
-	mCommandList->SetGraphicsRootDescriptorTable(4, mWaves->DisplacementMap());
 
 	/*DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque]);*/
 
@@ -737,27 +727,6 @@ void SimMain::UpdateMainPassCB(const GameTimer& gt)
 	currPassCB->CopyData(0, mMainPassCB);
 }
 
-void SimMain::UpdateWavesGPU(const GameTimer& gt)
-{
-	// Every quarter second, generate a random wave.
-	static float t_base = 0.0f;
-	if (/*(mTimer.TotalTime() - t_base) >= 0.25f*/dirtyData)
-	{
-		t_base += 0.25f;
-
-		int i = MathHelper::Rand(4, mWaves->RowCount() - 5);
-		int j = MathHelper::Rand(4, mWaves->ColumnCount() - 5);
-
-		float r = MathHelper::RandF(1.0f, 2.0f);
-
-		mWaves->Disturb(mCommandList.Get(), mWavesRootSignature.Get(), mPSOs["wavesDisturb"].Get(), i, j, r,disLoc);
-
-		dirtyData = false;
-	}
-
-	// Update the wave simulation.
-	mWaves->Update(gt, mCommandList.Get(), mWavesRootSignature.Get(), mPSOs["wavesUpdate"].Get());
-}
 
 void SimMain::LoadTextures()
 {
@@ -831,49 +800,6 @@ void SimMain::BuildRootSignature()
 		IID_PPV_ARGS(mRootSignature.GetAddressOf())));
 }
 
-void SimMain::BuildWavesRootSignature()
-{
-	CD3DX12_DESCRIPTOR_RANGE uavTable0;
-	uavTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
-
-	CD3DX12_DESCRIPTOR_RANGE uavTable1;
-	uavTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
-
-	CD3DX12_DESCRIPTOR_RANGE uavTable2;
-	uavTable2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 2);
-
-	// Root parameter can be a table, root descriptor or root constants.
-	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
-
-	// Perfomance TIP: Order from most frequent to least frequent.
-	slotRootParameter[0].InitAsConstants(6, 0);
-	slotRootParameter[1].InitAsDescriptorTable(1, &uavTable0);
-	slotRootParameter[2].InitAsDescriptorTable(1, &uavTable1);
-	slotRootParameter[3].InitAsDescriptorTable(1, &uavTable2);
-
-	// A root signature is an array of root parameters.
-	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(4, slotRootParameter,
-		0, nullptr,
-		D3D12_ROOT_SIGNATURE_FLAG_NONE);
-
-	// create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
-	ComPtr<ID3DBlob> serializedRootSig = nullptr;
-	ComPtr<ID3DBlob> errorBlob = nullptr;
-	HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
-		serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
-
-	if (errorBlob != nullptr)
-	{
-		::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
-	}
-	ThrowIfFailed(hr);
-
-	ThrowIfFailed(md3dDevice->CreateRootSignature(
-		0,
-		serializedRootSig->GetBufferPointer(),
-		serializedRootSig->GetBufferSize(),
-		IID_PPV_ARGS(mWavesRootSignature.GetAddressOf())));
-}
 
 void SimMain::BuildDescriptorHeaps()
 {
@@ -883,7 +809,7 @@ void SimMain::BuildDescriptorHeaps()
 	// Create the SRV heap.
 	//
 	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
-	srvHeapDesc.NumDescriptors = srvCount + mWaves->DescriptorCount();
+	srvHeapDesc.NumDescriptors = srvCount;
 	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSrvDescriptorHeap)));
@@ -917,10 +843,7 @@ void SimMain::BuildDescriptorHeaps()
 	srvDesc.Format = fenceTex->GetDesc().Format;
 	md3dDevice->CreateShaderResourceView(fenceTex.Get(), &srvDesc, hDescriptor);
 
-	mWaves->BuildDescriptors(
-		CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), srvCount, mCbvSrvDescriptorSize),
-		CD3DX12_GPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), srvCount, mCbvSrvDescriptorSize),
-		mCbvSrvDescriptorSize);
+
 }
 
 void SimMain::BuildShadersAndInputLayout()
@@ -1115,53 +1038,7 @@ void SimMain::BuildSphereGeometry()
 	mGeometries["sphereGeo"] = std::move(geo);
 }
 
-void SimMain::BuildWavesGeometry()
-{
-	GeometryGenerator geoGen;
-	GeometryGenerator::MeshData grid = geoGen.CreateGrid(40.0f, 40.0f, mWaves->RowCount(), mWaves->ColumnCount());
 
-	std::vector<Vertex> vertices(grid.Vertices.size());
-	for (size_t i = 0; i < grid.Vertices.size(); ++i)
-	{
-		vertices[i].Pos = grid.Vertices[i].Position;
-		vertices[i].Normal = grid.Vertices[i].Normal;
-		vertices[i].TexC = grid.Vertices[i].TexC;
-	}
-
-	std::vector<std::uint32_t> indices = grid.Indices32;
-
-	UINT vbByteSize = mWaves->VertexCount() * sizeof(Vertex);
-	UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint32_t);
-
-	auto geo = std::make_unique<MeshGeometry>();
-	geo->Name = "waterGeo";
-
-	ThrowIfFailed(D3DCreateBlob(vbByteSize, &geo->VertexBufferCPU));
-	CopyMemory(geo->VertexBufferCPU->GetBufferPointer(), vertices.data(), vbByteSize);
-
-	ThrowIfFailed(D3DCreateBlob(ibByteSize, &geo->IndexBufferCPU));
-	CopyMemory(geo->IndexBufferCPU->GetBufferPointer(), indices.data(), ibByteSize);
-
-	geo->VertexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
-		mCommandList.Get(), vertices.data(), vbByteSize, geo->VertexBufferUploader);
-
-	geo->IndexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
-		mCommandList.Get(), indices.data(), ibByteSize, geo->IndexBufferUploader);
-
-	geo->VertexByteStride = sizeof(Vertex);
-	geo->VertexBufferByteSize = vbByteSize;
-	geo->IndexFormat = DXGI_FORMAT_R32_UINT;
-	geo->IndexBufferByteSize = ibByteSize;
-
-	SubmeshGeometry submesh;
-	submesh.IndexCount = (UINT)indices.size();
-	submesh.StartIndexLocation = 0;
-	submesh.BaseVertexLocation = 0;
-
-	geo->DrawArgs["grid"] = submesh;
-
-	mGeometries["waterGeo"] = std::move(geo);
-}
 
 void SimMain::BuildBoxGeometry()
 {
@@ -1282,7 +1159,7 @@ void SimMain::BuildPSOs()
 	//
 	//PSo for land geometry
 	//
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC landPsoDesc = transparentPsoDesc;
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC landPsoDesc = opaquePsoDesc;
 	landPsoDesc.PS = {
 				reinterpret_cast<BYTE*>(mShaders["landPs"]->GetBufferPointer()),
 		mShaders["landPs"]->GetBufferSize()
@@ -1307,45 +1184,9 @@ void SimMain::BuildPSOs()
 	reinterpret_cast<BYTE*>(mShaders["volumeVS"]->GetBufferPointer()),
 	mShaders["volumeVS"]->GetBufferSize()
 	};
-	volPsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+	//volPsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
 	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&volPsoDesc, IID_PPV_ARGS(&mPSOs["volPSO"])));
 
-	//
-	// PSO for drawing waves
-	//
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC wavesRenderPSO = transparentPsoDesc;
-	wavesRenderPSO.VS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["wavesVS"]->GetBufferPointer()),
-		mShaders["wavesVS"]->GetBufferSize()
-	};
-	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&wavesRenderPSO, IID_PPV_ARGS(&mPSOs["wavesRender"])));
-
-	//
-	// PSO for disturbing waves
-	//
-	D3D12_COMPUTE_PIPELINE_STATE_DESC wavesDisturbPSO = {};
-	wavesDisturbPSO.pRootSignature = mWavesRootSignature.Get();
-	wavesDisturbPSO.CS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["wavesDisturbCS"]->GetBufferPointer()),
-		mShaders["wavesDisturbCS"]->GetBufferSize()
-	};
-	wavesDisturbPSO.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
-	ThrowIfFailed(md3dDevice->CreateComputePipelineState(&wavesDisturbPSO, IID_PPV_ARGS(&mPSOs["wavesDisturb"])));
-
-	//
-	// PSO for updating waves
-	//
-	D3D12_COMPUTE_PIPELINE_STATE_DESC wavesUpdatePSO = {};
-	wavesUpdatePSO.pRootSignature = mWavesRootSignature.Get();
-	wavesUpdatePSO.CS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["wavesUpdateCS"]->GetBufferPointer()),
-		mShaders["wavesUpdateCS"]->GetBufferSize()
-	};
-	wavesUpdatePSO.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
-	ThrowIfFailed(md3dDevice->CreateComputePipelineState(&wavesUpdatePSO, IID_PPV_ARGS(&mPSOs["wavesUpdate"])));
 }
 
 void SimMain::BuildFrameResources()
@@ -1392,28 +1233,12 @@ void SimMain::BuildMaterials()
 
 void SimMain::BuildRenderItems()
 {
-	auto wavesRitem = std::make_unique<RenderItem>();
-	wavesRitem->World = MathHelper::Identity4x4();
-	XMStoreFloat4x4(&wavesRitem->TexTransform, XMMatrixScaling(5.0f, 5.0f, 1.0f));
-	XMStoreFloat4x4(&wavesRitem->World, XMMatrixTranslation(9, 20, -9));
-	wavesRitem->DisplacementMapTexelSize.x = 1.0f / mWaves->ColumnCount();
-	wavesRitem->DisplacementMapTexelSize.y = 1.0f / mWaves->RowCount();
-	wavesRitem->GridSpatialStep = mWaves->SpatialStep();
-	wavesRitem->ObjCBIndex = 0;
-	wavesRitem->Mat = mMaterials["water"].get();
-	wavesRitem->Geo = mGeometries["waterGeo"].get();
-	wavesRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-	wavesRitem->IndexCount = wavesRitem->Geo->DrawArgs["grid"].IndexCount;
-	wavesRitem->StartIndexLocation = wavesRitem->Geo->DrawArgs["grid"].StartIndexLocation;
-	wavesRitem->BaseVertexLocation = wavesRitem->Geo->DrawArgs["grid"].BaseVertexLocation;
-
-	mRitemLayer[(int)RenderLayer::GpuWaves].push_back(wavesRitem.get());
 
 	auto gridRitem = std::make_unique<RenderItem>();
 	gridRitem->World = MathHelper::Identity4x4();
 	XMStoreFloat4x4(&gridRitem->TexTransform, XMMatrixScaling(5.0f, 5.0f, 1.0f));
-	XMStoreFloat4x4(&gridRitem->World, XMMatrixTranslation(0, -20, -0));
-	gridRitem->ObjCBIndex = 1;
+	XMStoreFloat4x4(&gridRitem->World, XMMatrixTranslation(0, -80, -0));
+	gridRitem->ObjCBIndex = 0;
 	gridRitem->Mat = mMaterials["grass"].get();
 	gridRitem->Geo = mGeometries["landGeo"].get();
 	gridRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
@@ -1425,7 +1250,7 @@ void SimMain::BuildRenderItems()
 
 	auto boxRitem = std::make_unique<RenderItem>();
 	XMStoreFloat4x4(&boxRitem->World, XMMatrixTranslation(mvolBox.boxcenter.x, mvolBox.boxcenter.y, mvolBox.boxcenter.z));
-	boxRitem->ObjCBIndex = 2;
+	boxRitem->ObjCBIndex = 1;
 	boxRitem->Mat = mMaterials["wirefence"].get();
 	boxRitem->Geo = mGeometries["boxGeo"].get();
 	boxRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
@@ -1437,7 +1262,7 @@ void SimMain::BuildRenderItems()
 
 	auto sphereRitem = std::make_unique<RenderItem>();
 	XMStoreFloat4x4(&sphereRitem->World, XMMatrixTranslation(9.0f, 9.0f, -9.0f));
-	sphereRitem->ObjCBIndex = 3;
+	sphereRitem->ObjCBIndex = 2;
 	sphereRitem->Mat = mMaterials["grass"].get();
 	sphereRitem->Geo = mGeometries["sphereGeo"].get();
 	sphereRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
@@ -1449,7 +1274,6 @@ void SimMain::BuildRenderItems()
 
 
 
-	mAllRitems.push_back(std::move(wavesRitem));
 	mAllRitems.push_back(std::move(gridRitem));
 	mAllRitems.push_back(std::move(boxRitem));
 	mAllRitems.push_back(std::move(sphereRitem));

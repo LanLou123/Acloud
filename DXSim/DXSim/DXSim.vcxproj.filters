@@ -24,9 +24,6 @@
     <ClInclude Include="..\FrameResource.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\GpuWaves.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\Common\Camera.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -72,15 +69,12 @@
     <ClInclude Include="..\imgui\imstb_truetype.h">
       <Filter>Header Files\imgui</Filter>
     </ClInclude>
-    <ClInclude Include="..\ClothComp.h">
+    <ClInclude Include="..\UAVtex.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\FrameResource.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\GpuWaves.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\Common\Camera.cpp">
@@ -122,7 +116,7 @@
     <ClCompile Include="..\imgui\imgui_widgets.cpp">
       <Filter>Source Files\imgui</Filter>
     </ClCompile>
-    <ClCompile Include="..\ClothComp.cpp">
+    <ClCompile Include="..\UAVtex.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

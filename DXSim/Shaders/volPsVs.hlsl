@@ -24,7 +24,7 @@
 #include "inc.hlsli"
 
 Texture2D    gDiffuseMap : register(t0);
-Texture2D    gDisplacementMap : register(t1);
+
 
 SamplerState gsamPointWrap        : register(s0);
 SamplerState gsamPointClamp       : register(s1);
@@ -142,9 +142,7 @@ float noisep(float3 x)
 
 //perlin noise
 
-//*********************
-//iq ray marching
-//*********************
+
 
 float Layer5( float3 p, float timeslice)
 {
@@ -212,18 +210,12 @@ float4 raymarch(float3 ro, float3 rd, float3 bgcol,float2 px)
 	float3 sundir = normalize(sunDir);
 	float timeslice = gTotalTime / 20;
 	float t = 0.0;//0.05*texelFetch( iChannel0, px&255, 0 ).x;
-
-
-
-
-
-
 	int STEPS = marchStep;
 	float stepmultiplier = stepMultiplier;
 	
 	float shadowMarcherDis = shadowMacherDis;
 	int i = 0;
-	float minh = - 3.;
+	float minh = - 6.;
 	float maxh = 6.;
 
 	for (i = 0; i < STEPS; i++) {
@@ -280,6 +272,7 @@ float4 raymarch(float3 ro, float3 rd, float3 bgcol,float2 px)
 
 float4 render( float3 ro, float3 rd, float2 px)
 {
+
 	float3 sundir = normalize(sunDir);
 	// background sky     
 	float sun1 = saturate(dot(sundir, rd));
@@ -297,9 +290,7 @@ float4 render( float3 ro, float3 rd, float2 px)
 	return float4(col, 1.0);
 }
 
-//*********************
-//iq ray marching
-//*********************
+
 
 //*************************
 //duke ray marching
