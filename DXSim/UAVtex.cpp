@@ -1,11 +1,13 @@
 #include "UAVtex.h"
 
-UAVtex::UAVtex(ID3D12Device* device, ID3D12GraphicsCommandList* cmdList, UINT width, UINT height)
+UAVtex::UAVtex(ID3D12Device* device, ID3D12GraphicsCommandList* cmdList, UINT width, UINT height, int deltatime)
 {
 	w = width;
 	h = height;
+	dt = deltatime;
 	md3Device = device;
 	BuildResources(cmdList);
+	BuildRootSignature();
 }
 
 CD3DX12_GPU_DESCRIPTOR_HANDLE UAVtex::getGpuSrvDescHandle() {
@@ -53,7 +55,7 @@ void UAVtex::BuildResources(ID3D12GraphicsCommandList* cmdList)
 		IID_PPV_ARGS(mUploadBuffer.GetAddressOf())
 	));
 
-	TexData defaultdata = { DirectX::XMFLOAT3(0,0,0) };
+	TexData defaultdata = { DirectX::XMFLOAT4(0,0,0,0) };
 	std::vector<TexData> data( w*h ,defaultdata);
 
 	D3D12_SUBRESOURCE_DATA subResourceData = {};
@@ -67,6 +69,11 @@ void UAVtex::BuildResources(ID3D12GraphicsCommandList* cmdList)
 		&subResourceData);
 	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mUav.Get(),
 		D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+}
+
+UINT UAVtex::DescriptorCount()const
+{
+	return 2;
 }
 
 void UAVtex::BuildDescriptors(CD3DX12_CPU_DESCRIPTOR_HANDLE hCpuDescriptor,
@@ -90,4 +97,71 @@ void UAVtex::BuildDescriptors(CD3DX12_CPU_DESCRIPTOR_HANDLE hCpuDescriptor,
 
 	mSrvDescHandle = hGpuDescriptor;
 	mUavDescHandle = hGpuDescriptor.Offset(1, descriptorSize);
+}
+
+void UAVtex::Update(const GameTimer& gt,
+	ID3D12GraphicsCommandList* cmdList,
+	ID3D12PipelineState* pso) {
+
+	static float t = 0.0f;
+	t += gt.DeltaTime();
+
+	cmdList->SetPipelineState(pso);
+	cmdList->SetComputeRootSignature(mRootSig.Get());
+	if (t >= dt)
+	{
+		cmdList->SetComputeRootDescriptorTable(0, mUavDescHandle);
+		//cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
+		//	mUav.Get(),
+		//	D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS
+		//));
+		UINT numGroupsX = w / 16;
+		UINT numGroupsY = h / 16;
+
+
+		cmdList->Dispatch(numGroupsX, numGroupsY, 1);
+
+		t = 0.0f;
+
+		cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
+			mUav.Get(),
+			D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ
+		));
+	}
+}
+
+void UAVtex::BuildRootSignature()
+{
+	CD3DX12_DESCRIPTOR_RANGE uavTable0;
+	uavTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+
+	CD3DX12_ROOT_PARAMETER slotRootParameter[1];
+
+	slotRootParameter[0].InitAsDescriptorTable(1, &uavTable0);
+
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(1, slotRootParameter, 0, nullptr,
+		D3D12_ROOT_SIGNATURE_FLAG_NONE);
+
+	ComPtr<ID3DBlob> serializedRootSig = nullptr;
+	ComPtr<ID3DBlob> errorBlob = nullptr;
+	HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+		serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
+
+	if (errorBlob != nullptr)
+	{
+		::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+	}
+	ThrowIfFailed(hr);
+
+	ThrowIfFailed(md3Device->CreateRootSignature(
+		0,
+		serializedRootSig->GetBufferPointer(),
+		serializedRootSig->GetBufferSize(),
+		IID_PPV_ARGS(mRootSig.GetAddressOf())));
+
+}
+
+ComPtr<ID3D12RootSignature> UAVtex::getRootSignature()
+{
+	return mRootSig;
 }

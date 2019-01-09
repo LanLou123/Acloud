@@ -142,6 +142,9 @@
     <FxCompile Include="..\Shaders\volPsVs.hlsl">
       <Filter>Resource Files</Filter>
     </FxCompile>
+    <FxCompile Include="..\Shaders\noiseComp.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\Shaders\inc.hlsli">

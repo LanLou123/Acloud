@@ -3,6 +3,7 @@
 #include "./Common/UploadBuffer.h"
 #include "./Common/GeometryGenerator.h"
 #include "FrameResource.h"
+#include "UAVtex.h"
 
 #include "./imgui/imgui.h"
 #include "./imgui/imgui_impl_dx12.h"
@@ -120,7 +121,6 @@ private:
 	void BuildDescriptorHeaps();
 	void BuildShadersAndInputLayout();
 	void BuildLandGeometry();
-	void BuildWavesGeometry();
 	void BuildBoxGeometry();
 	void BuildSphereGeometry();
 	void BuildClothGeometry();
@@ -173,7 +173,7 @@ private:
 	// Render items divided by PSO.
 	std::vector<RenderItem*> mRitemLayer[(int)RenderLayer::Count];
 
-
+	std::unique_ptr<UAVtex> mNoise;
 
 	PassConstants mMainPassCB;
 
@@ -278,6 +278,11 @@ bool SimMain::Initialize()
 	// so we have to query this information.
 	mCbvSrvDescriptorSize = md3dDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
+	mNoise = std::make_unique<UAVtex>(
+		md3dDevice.Get(),
+		mCommandList.Get(),
+		256, 256, 0.03f
+		);
 
 	LoadTextures();
 	BuildRootSignature();
@@ -335,7 +340,6 @@ void SimMain::Update(const GameTimer& gt)
 	//AnimateMaterials(gt);
 	UpdateObjectCBs(gt);
 	UpdateMaterialCBs(gt);
-
 	UpdateMainPassCB(gt);
 }
 
@@ -355,6 +359,7 @@ void SimMain::Draw(const GameTimer& gt)
 	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 
 	//UpdateWavesGPU(gt);
+	mNoise->Update(gt, mCommandList.Get(), mPSOs["noiseComp"].Get());
 
 	mCommandList->SetPipelineState(mPSOs["opaque"].Get());
 
@@ -808,7 +813,7 @@ void SimMain::BuildDescriptorHeaps()
 	// Create the SRV heap.
 	//
 	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
-	srvHeapDesc.NumDescriptors = srvCount;
+	srvHeapDesc.NumDescriptors = srvCount+mNoise->DescriptorCount();
 	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSrvDescriptorHeap)));
@@ -842,6 +847,10 @@ void SimMain::BuildDescriptorHeaps()
 	srvDesc.Format = fenceTex->GetDesc().Format;
 	md3dDevice->CreateShaderResourceView(fenceTex.Get(), &srvDesc, hDescriptor);
 
+	mNoise->BuildDescriptors(CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), srvCount, mCbvSrvDescriptorSize),
+		CD3DX12_GPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), srvCount, mCbvSrvDescriptorSize),
+		mCbvSrvDescriptorSize);
+
 
 }
 
@@ -867,15 +876,13 @@ void SimMain::BuildShadersAndInputLayout()
 	};
 
 	mShaders["standardVS"] = d3dUtil::CompileShader(L"../Shaders/Default.hlsl", nullptr, "VS", "vs_5_0");
-	mShaders["wavesVS"] = d3dUtil::CompileShader(L"../Shaders/Default.hlsl", waveDefines, "VS", "vs_5_0");
 	mShaders["opaquePS"] = d3dUtil::CompileShader(L"../Shaders/Default.hlsl", defines, "PS", "ps_5_0");
 	mShaders["alphaTestedPS"] = d3dUtil::CompileShader(L"../Shaders/Default.hlsl", alphaTestDefines, "PS", "ps_5_0");
-	mShaders["wavesUpdateCS"] = d3dUtil::CompileShader(L"../Shaders/WaveSim.hlsl", nullptr, "UpdateWavesCS", "cs_5_0");
-	mShaders["wavesDisturbCS"] = d3dUtil::CompileShader(L"../Shaders/WaveSim.hlsl", nullptr, "DisturbWavesCS", "cs_5_0");
 	mShaders["landVs"] = d3dUtil::CompileShader(L"../Shaders/LandPsVs.hlsl", nullptr, "VS", "vs_5_0");
 	mShaders["landPs"] = d3dUtil::CompileShader(L"../Shaders/LandPsVs.hlsl", nullptr, "PS", "ps_5_0");
 	mShaders["volumeVS"] = d3dUtil::CompileShader(L"../Shaders/volPsVs.hlsl", nullptr, "VS", "vs_5_0");
 	mShaders["volumePS"] = d3dUtil::CompileShader(L"../Shaders/volPsVs.hlsl", nullptr, "PS", "ps_5_0");
+	mShaders["NoiseComp"] = d3dUtil::CompileShader(L"../Shaders/noiseComp.hlsl", nullptr, "noiseComp", "cs_5_0");
 
 	mInputLayout =
 	{
@@ -1185,6 +1192,15 @@ void SimMain::BuildPSOs()
 	};
 	//volPsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
 	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&volPsoDesc, IID_PPV_ARGS(&mPSOs["volPSO"])));
+
+	D3D12_COMPUTE_PIPELINE_STATE_DESC noiseCompPSO = {};
+	noiseCompPSO.pRootSignature = mNoise->getRootSignature().Get();
+	noiseCompPSO.CS = {
+		reinterpret_cast<BYTE*>(mShaders["NoiseComp"]->GetBufferPointer()),
+		mShaders["NoiseComp"]->GetBufferSize()
+	};
+	noiseCompPSO.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+	ThrowIfFailed(md3dDevice->CreateComputePipelineState(&noiseCompPSO, IID_PPV_ARGS(&mPSOs["noiseComp"])));
 
 }
 
