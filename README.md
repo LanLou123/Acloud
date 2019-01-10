@@ -14,6 +14,6 @@
 
 ![](DXSim/img/cloud.JPG)
 
-- current effect
+- current raymarching effect
 
 ![](DXSim/img/g2.gif)
