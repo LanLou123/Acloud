@@ -17,3 +17,8 @@
 - current raymarching effect
 
 ![](DXSim/img/g2.gif)
+
+### Reference :
+- [THE REAL-TIME VOLUMETRIC CLOUDSCAPES OF HORIZON ZERO DAWN](https://www.guerrilla-games.com/read/the-real-time-volumetric-cloudscapes-of-horizon-zero-dawn)
+- [Physically Based Sky, Atmosphere and Cloud Rendering in Frostbite BY 
+  S´ebastien Hillaire EA Frostbite](https://media.contentapi.ea.com/content/dam/eacom/frostbite/files/s2016-pbs-frostbite-sky-clouds-new.pdf)
