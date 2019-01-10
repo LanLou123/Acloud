@@ -1,6 +1,11 @@
 //*****************************
 //worley perlin noise
 //*****************************
+#define NUM_OCTAVES 5
+#define DIS_MAX 1e5
+#define DIS_MIN -1e5
+#define EPSILON 0.00001f
+#define FLT_EPSILON     1.192092896e-07 
 
 float r(float n)
 {

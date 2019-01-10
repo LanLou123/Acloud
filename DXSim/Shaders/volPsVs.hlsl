@@ -13,18 +13,18 @@
 #define NUM_SPOT_LIGHTS 0
 #endif
 
-#define NUM_OCTAVES 5
-#define DIS_MAX 1e5
-#define DIS_MIN -1e5
-#define EPSILON 0.00001f
-#define FLT_EPSILON     1.192092896e-07 
+
 
 // Include structures and functions for lighting.
 #include "LightingUtil.hlsl"
 #include "inc.hlsli"
 
-Texture2D    gDiffuseMap : register(t0);
+struct datai {
+	float4 n1;
+};
 
+Texture2D    gDiffuseMap : register(t0);
+RWTexture2D	 <float4> noiseMap : register(u2);
 
 SamplerState gsamPointWrap        : register(s0);
 SamplerState gsamPointClamp       : register(s1);
@@ -138,13 +138,13 @@ float noisep(float3 x)
 			lerp(hash(n + 170.0), hash(n + 171.0), f.x), f.y), f.z);
 }
 
-#define divstep 2.15
+
 
 //perlin noise
+#define divstep 2.15
 
 
-
-float Layer5( float3 p, float timeslice)
+float Layer5( float3 p, float timeslice, float mg)
 {
 
 	//float dis = (1.0+perlin_noise(vec3(fragCoord.xy/iResolution.xy, iTime*0.05)*8.0)) 
@@ -158,10 +158,10 @@ float Layer5( float3 p, float timeslice)
 	f += 0.12500*noisep(q); q = q * divstep;
 	f += 0.06250*noisep(q); q = q * divstep;
 	f += 0.03125*noisep(q);
-	return clamp(1.5 - p.y / 1 - 2.0 + 1.75*f, 0.0, 511.0);
+	return clamp(1.5 - p.y / 1 - 2.0 + 1.75*f, 0.0, 511.0)*mg;
 }
 
-float Layer4( float3 p, float timeslice)
+float Layer4( float3 p, float timeslice, float mg)
 {
 	float3 q = p - float3(0.0, 0.1, 1.0)*timeslice;
 	float f;
@@ -169,24 +169,24 @@ float Layer4( float3 p, float timeslice)
 	f += 0.25000*noisep(q); q = q * divstep;
 	f += 0.12500*noisep(q); q = q * divstep;
 	f += 0.06250*noisep(q);
-	return clamp(1.5 - p.y / 1 - 2.0 + 1.75*f, 0.0, 511.0);
+	return clamp(1.5 - p.y / 1 - 2.0 + 1.75*f, 0.0, 511.0)*mg;
 }
-float Layer3( float3 p, float timeslice)
+float Layer3( float3 p, float timeslice, float mg)
 {
 	float3 q = p - float3(0.0, 0.1, 1.0)*timeslice;
 	float f;
 	f = 0.50000*noisep(q); q = q * divstep;
 	f += 0.25000*noisep(q); q = q * divstep;
 	f += 0.12500*noisep(q);
-	return clamp(1.5 - p.y/1 - 2.0 + 1.75*f, 0.0, 511.0);
+	return clamp(1.5 - p.y/1 - 2.0 + 1.75*f, 0.0, 511.0)*mg;
 }
-float Layer2( float3 p, float timeslice)
+float Layer2( float3 p, float timeslice,float mg)
 {
 	float3 q = p - float3(0.0, 0.1, 1.0)*timeslice;
 	float f;
 	f = 0.50000*noisep(q); q = q * divstep;
 	f += 0.25000*noisep(q);;
-	return clamp(1.5 - p.y / 1 - 2.0 + 1.75*f, 0.0, 511.0);
+	return clamp(1.5 - p.y / 1 - 2.0 + 1.75*f, 0.0, 511.0)*mg;
 }
 
 
@@ -204,7 +204,7 @@ float4 integrate( float4 sum, float dif,  float den,  float3 bgcol,  float t)
 }
 
 
-float4 raymarch(float3 ro, float3 rd, float3 bgcol,float2 px)
+float4 raymarch(float3 ro, float3 rd, float3 bgcol,float2 px,float mg)
 {
 	float4 sum = float4(0.0,0,0,0);
 	float3 sundir = normalize(sunDir);
@@ -222,10 +222,10 @@ float4 raymarch(float3 ro, float3 rd, float3 bgcol,float2 px)
 		float3  pos = ro + t * rd;
 		if (pos.y<minh || pos.y>maxh || sum.a > 0.99)
 			break;
-		float den = Layer5(pos, timeslice);
+		float den = Layer5(pos, timeslice,mg);
 		if (den > densityFilter)
 		{
-			float dif = clamp((den - Layer5(pos + shadowMarcherDis *sundir, timeslice)) / shadowDivider, 0.0, 2.0);//sample color from current pos to forward pos along sun direction to get self shadow approximation
+			float dif = clamp((den - Layer5(pos + shadowMarcherDis *sundir, timeslice, mg)) / shadowDivider, 0.0, 2.0);//sample color from current pos to forward pos along sun direction to get self shadow approximation
 			sum = integrate(sum, dif, den, bgcol, t);										//limited because we did just one sample, we can actually do another raymarching here but it will be really expensive
 		}
 		t += max(maximumStepSize, stepmultiplier*t);
@@ -234,10 +234,10 @@ float4 raymarch(float3 ro, float3 rd, float3 bgcol,float2 px)
 		float3  pos = ro + t * rd;
 		if (pos.y<minh || pos.y>maxh || sum.a > 0.99)
 			break;
-		float den = Layer4(pos, timeslice);
+		float den = Layer4(pos, timeslice, mg);
 		if (den > densityFilter)
 		{
-			float dif = clamp((den - Layer4(pos + shadowMarcherDis *sundir, timeslice)) / shadowDivider, 0.0, 2.0);
+			float dif = clamp((den - Layer4(pos + shadowMarcherDis *sundir, timeslice, mg)) / shadowDivider, 0.0, 2.0);
 			sum = integrate(sum, dif, den, bgcol, t);
 		}
 		t += max(maximumStepSize, stepmultiplier*t);
@@ -246,10 +246,10 @@ float4 raymarch(float3 ro, float3 rd, float3 bgcol,float2 px)
 		float3  pos = ro + t * rd;
 		if (pos.y<minh || pos.y>maxh || sum.a > 0.99)
 			break;
-		float den = Layer3(pos, timeslice);
+		float den = Layer3(pos, timeslice, mg);
 		if (den > densityFilter)
 		{
-			float dif = clamp((den - Layer3(pos + shadowMarcherDis *sundir, timeslice)) / shadowDivider, 0.0, 2.0);
+			float dif = clamp((den - Layer3(pos + shadowMarcherDis *sundir, timeslice, mg)) / shadowDivider, 0.0, 2.0);
 			sum = integrate(sum, dif, den, bgcol, t);
 		}
 		t += max(maximumStepSize, stepmultiplier*t);
@@ -258,10 +258,10 @@ float4 raymarch(float3 ro, float3 rd, float3 bgcol,float2 px)
 		float3  pos = ro + t * rd;
 		if (pos.y<minh || pos.y>maxh || sum.a > 0.99)
 			break;
-		float den = Layer2(pos, timeslice);
+		float den = Layer2(pos, timeslice, mg);
 		if (den > densityFilter)
 		{
-			float dif = clamp((den - Layer2(pos + shadowMarcherDis *sundir, timeslice)) / shadowDivider, 0.0, 2.0);
+			float dif = clamp((den - Layer2(pos + shadowMarcherDis *sundir, timeslice, mg)) / shadowDivider, 0.0, 2.0);
 			sum = integrate(sum, dif, den, bgcol, t);
 		}
 		t += max(maximumStepSize, stepmultiplier*t);
@@ -270,7 +270,7 @@ float4 raymarch(float3 ro, float3 rd, float3 bgcol,float2 px)
 	return clamp(sum, 0.0, 1.0);
 }
 
-float4 render( float3 ro, float3 rd, float2 px)
+float4 render( float3 ro, float3 rd, float2 px, float mg)
 {
 
 	float3 sundir = normalize(sunDir);
@@ -280,7 +280,7 @@ float4 render( float3 ro, float3 rd, float2 px)
 	col += 0.2*float3(1.0, .6, 0.1)*pow(sun1, 8.0);
 
 	// clouds    
-	float4 res =raymarch(ro, rd, col, px);
+	float4 res =raymarch(ro, rd, col, px,mg);
 	col = col * (1.0 - res.w) + res.xyz;
 
 
@@ -296,79 +296,79 @@ float4 render( float3 ro, float3 rd, float2 px)
 //duke ray marching
 //*************************
 
-float rand(float2 co)
-{// implementation found at: lumina.sourceforge.net/Tutorials/Noise.html
-	return frac(sin(dot(co*0.123, float2(12.9898, 78.233))) * 43758.5453);
-}
-
-float3 cloudd(float3 rd, float3 ro, float2 pos1)
-{
-
-	float ld = 0., td = 0., w;
-	// t: length of the ray
-	// d: distance function
-	float d = 1., t = 0.;
-
-	// Distance threshold.
-	const float h = .1;
-
-	float3 sundir = normalize(float3(-1.0, 0.15, 1.0));
-	// background sky     
-	float sun = clamp(dot(sundir, rd), 0.0, 1.0);
-	float3 col = float3(0.6, 0.71, 0.75) - rd.y*0.2*float3(1.0, 0.5, 1.0) + 0.15*0.5;
-	col += 0.2*float3(1.0, .6, 0.1)*pow(sun, 8.0);
-	// clouds  
-	float3 bgcol = col;
-	float4 sum = { 0,0,0,0 };
-	float2 seed = pos1 + frac(gTotalTime);
-
-	for (int i = 0; i < 64; ++i)
-	{
-		float3 pos = ro + t * rd;
-		pos.y = -pos.y*0.8;
-
-		// Loop break conditions.
-		if (td > (1. - 1. / 80.) || d<0.0006*t || t>120. || pos.y<-5.0 || pos.y> -0.5 || sum.a > 0.99) break;
-
-		d = Layer5(pos, gTotalTime*0.0001)*0.526;
-
-		if (d < 0.6)
-		{
-			// compute local density and weighting factor 
-			ld = 0.1 - d;
-
-			ld *= clamp((ld - Layer4(pos + 0.3*sundir, gTotalTime*0.0001)) / 0.6, 0.0, 1.0);
-			const float kmaxdist = 1;
-			w = (1. - td) * ld;
-
-			// accumulate density
-			td += w;// + 1./90.;
-
-			float3 lin = float3(0.65, 0.68, 0.7)*1.3 + 0.5*float3(0.7, 0.5, 0.3)*ld;
-			float4 col = float4(lerp(1.15*float3(1.0, 0.95, 0.9), float3(0.765, 0.765, 0.765), d), max(kmaxdist, d));
-			col.xyz *= lin;
-			col.xyz = lerp(col.xyz, bgcol, 1.0 - exp(-0.0004*t*t));
-			// front to back blending    
-			col.a *= 0.8;
-			col.rgb *= col.a;
-			sum = sum + col * (1.0 - sum.a);
-		}
-		td += 1. / 70.;
-		// enforce minimum stepsize
-		d = max(d, 0.04);
-		d = abs(d)*(1. + 0.28*rand(seed*float2(i, i)));
-		t += d * .5;
-	}
-
-
-	sum = clamp(sum, 0.0, 1.0);
-	float sun1 = saturate(dot(sundir, rd));
-	sum.xyz += lerp(0.1, 1, 1 - sum.a)*float3(1.0, .6, 0.1)*pow(sun1, 8.0);
-
-	col = float3(0.6, 0.71, 0.75) - rd.y*0.2*float3(1.0, 0.5, 1.0) + 0.15*0.5;
-	col = col * (1.0 - sum.w) + sum.xyz;
-	return col;
-}
+//float rand(float2 co)
+//{// implementation found at: lumina.sourceforge.net/Tutorials/Noise.html
+//	return frac(sin(dot(co*0.123, float2(12.9898, 78.233))) * 43758.5453);
+//}
+//
+//float3 cloudd(float3 rd, float3 ro, float2 pos1)
+//{
+//
+//	float ld = 0., td = 0., w;
+//	// t: length of the ray
+//	// d: distance function
+//	float d = 1., t = 0.;
+//
+//	// Distance threshold.
+//	const float h = .1;
+//
+//	float3 sundir = normalize(float3(-1.0, 0.15, 1.0));
+//	// background sky     
+//	float sun = clamp(dot(sundir, rd), 0.0, 1.0);
+//	float3 col = float3(0.6, 0.71, 0.75) - rd.y*0.2*float3(1.0, 0.5, 1.0) + 0.15*0.5;
+//	col += 0.2*float3(1.0, .6, 0.1)*pow(sun, 8.0);
+//	// clouds  
+//	float3 bgcol = col;
+//	float4 sum = { 0,0,0,0 };
+//	float2 seed = pos1 + frac(gTotalTime);
+//
+//	for (int i = 0; i < 64; ++i)
+//	{
+//		float3 pos = ro + t * rd;
+//		pos.y = -pos.y*0.8;
+//
+//		// Loop break conditions.
+//		if (td > (1. - 1. / 80.) || d<0.0006*t || t>120. || pos.y<-5.0 || pos.y> -0.5 || sum.a > 0.99) break;
+//
+//		d = Layer5(pos, gTotalTime*0.0001)*0.526;
+//
+//		if (d < 0.6)
+//		{
+//			// compute local density and weighting factor 
+//			ld = 0.1 - d;
+//
+//			ld *= clamp((ld - Layer4(pos + 0.3*sundir, gTotalTime*0.0001)) / 0.6, 0.0, 1.0);
+//			const float kmaxdist = 1;
+//			w = (1. - td) * ld;
+//
+//			// accumulate density
+//			td += w;// + 1./90.;
+//
+//			float3 lin = float3(0.65, 0.68, 0.7)*1.3 + 0.5*float3(0.7, 0.5, 0.3)*ld;
+//			float4 col = float4(lerp(1.15*float3(1.0, 0.95, 0.9), float3(0.765, 0.765, 0.765), d), max(kmaxdist, d));
+//			col.xyz *= lin;
+//			col.xyz = lerp(col.xyz, bgcol, 1.0 - exp(-0.0004*t*t));
+//			// front to back blending    
+//			col.a *= 0.8;
+//			col.rgb *= col.a;
+//			sum = sum + col * (1.0 - sum.a);
+//		}
+//		td += 1. / 70.;
+//		// enforce minimum stepsize
+//		d = max(d, 0.04);
+//		d = abs(d)*(1. + 0.28*rand(seed*float2(i, i)));
+//		t += d * .5;
+//	}
+//
+//
+//	sum = clamp(sum, 0.0, 1.0);
+//	float sun1 = saturate(dot(sundir, rd));
+//	sum.xyz += lerp(0.1, 1, 1 - sum.a)*float3(1.0, .6, 0.1)*pow(sun1, 8.0);
+//
+//	col = float3(0.6, 0.71, 0.75) - rd.y*0.2*float3(1.0, 0.5, 1.0) + 0.15*0.5;
+//	col = col * (1.0 - sum.w) + sum.xyz;
+//	return col;
+//}
 
 
 //*************************
@@ -881,8 +881,9 @@ float4 PS(VertexOut pin) : SV_Target
 	//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 	//iq cloud
-
-	float4 acc =  render(gEyePosW/50, -toEyeW, pin.PosH.xy);
+	float mg = noiseMap[int2(pin.PosW.x, pin.PosW.z) + int2(128, 128)].x;
+	mg = 1 - mg;
+	float4 acc =  render(gEyePosW/50, -toEyeW, pin.PosH.xy, 1);
 	//iq cloud
 
 	//duke cloud

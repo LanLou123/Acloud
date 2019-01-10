@@ -382,6 +382,7 @@ void SimMain::Draw(const GameTimer& gt)
 	auto passCB = mCurrFrameResource->PassCB->Resource();
 	mCommandList->SetGraphicsRootConstantBufferView(2, passCB->GetGPUVirtualAddress());
 
+	mCommandList->SetGraphicsRootDescriptorTable(4, mNoise->getGpuUavDescHandle());
 
 	/*DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque]);*/
 
@@ -765,8 +766,8 @@ void SimMain::BuildRootSignature()
 	CD3DX12_DESCRIPTOR_RANGE texTable;
 	texTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
 
-	CD3DX12_DESCRIPTOR_RANGE displacementMapTable;
-	displacementMapTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+	CD3DX12_DESCRIPTOR_RANGE noismap;
+	noismap.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 2);
 
 	// Root parameter can be a table, root descriptor or root constants.
 	CD3DX12_ROOT_PARAMETER slotRootParameter[5];
@@ -776,7 +777,7 @@ void SimMain::BuildRootSignature()
 	slotRootParameter[1].InitAsConstantBufferView(0);
 	slotRootParameter[2].InitAsConstantBufferView(1);
 	slotRootParameter[3].InitAsConstantBufferView(2);
-	slotRootParameter[4].InitAsDescriptorTable(1, &displacementMapTable, D3D12_SHADER_VISIBILITY_ALL);
+	slotRootParameter[4].InitAsDescriptorTable(1, &noismap, D3D12_SHADER_VISIBILITY_ALL);
 
 	auto staticSamplers = GetStaticSamplers();
 

@@ -28,7 +28,7 @@ void UAVtex::BuildResources(ID3D12GraphicsCommandList* cmdList)
 	texDesc.Height = h;
 	texDesc.DepthOrArraySize = 1;
 	texDesc.MipLevels = 1;
-	texDesc.Format = DXGI_FORMAT_R32_FLOAT;
+	texDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
 	texDesc.SampleDesc.Count = 1;
 	texDesc.SampleDesc.Quality = 0;
 	texDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
@@ -55,12 +55,12 @@ void UAVtex::BuildResources(ID3D12GraphicsCommandList* cmdList)
 		IID_PPV_ARGS(mUploadBuffer.GetAddressOf())
 	));
 
-	TexData defaultdata = { DirectX::XMFLOAT4(0,0,0,0) };
-	std::vector<TexData> data( w*h ,defaultdata);
+
+	std::vector<DirectX::XMFLOAT4> data( w*h , DirectX::XMFLOAT4(0, 0, 0, 0));
 
 	D3D12_SUBRESOURCE_DATA subResourceData = {};
 	subResourceData.pData = data.data();
-	subResourceData.RowPitch = w * sizeof(TexData);//data in bytes per row
+	subResourceData.RowPitch = w * sizeof(DirectX::XMFLOAT4);//data in bytes per row
 	subResourceData.SlicePitch = subResourceData.RowPitch*h;
 
 	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mUav.Get(),
@@ -81,14 +81,14 @@ void UAVtex::BuildDescriptors(CD3DX12_CPU_DESCRIPTOR_HANDLE hCpuDescriptor,
 	UINT descriptorSize) {
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	srvDesc.Format = DXGI_FORMAT_R32_FLOAT;
+	srvDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 	srvDesc.Texture2D.MostDetailedMip = 0;
 	srvDesc.Texture2D.MipLevels = 1;
 
 	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 
-	uavDesc.Format = DXGI_FORMAT_R32_FLOAT;
+	uavDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
 	uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
 	uavDesc.Texture2D.MipSlice = 0;
 
@@ -111,10 +111,10 @@ void UAVtex::Update(const GameTimer& gt,
 	if (t >= dt)
 	{
 		cmdList->SetComputeRootDescriptorTable(0, mUavDescHandle);
-		//cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
-		//	mUav.Get(),
-		//	D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS
-		//));
+		cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
+			mUav.Get(),
+			D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS
+		));
 		UINT numGroupsX = w / 16;
 		UINT numGroupsY = h / 16;
 

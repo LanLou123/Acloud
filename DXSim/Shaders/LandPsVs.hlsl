@@ -22,8 +22,10 @@
 // Include structures and functions for lighting.
 #include "LightingUtil.hlsl"
 
+
+
 Texture2D    gDiffuseMap : register(t0);
-Texture2D    gDisplacementMap : register(t1);
+RWTexture2D<float4> noiseMap : register(u2);
 
 SamplerState gsamPointWrap        : register(s0);
 SamplerState gsamPointClamp       : register(s1);
@@ -211,7 +213,7 @@ VertexOut VS(VertexIn vin)
 
 	float h = finalFbm(float2(posW.x, posW.z)/10);
 
-	posW.y = 10*h;
+	posW.y = 0;
 
 	vout.PosW = posW.xyz;
 	// Assumes nonuniform scaling; otherwise, need to use inverse-transpose of world matrix.
@@ -270,6 +272,12 @@ float4 PS(VertexOut pin) : SV_Target
 	litColor = float4(f, f, f, 1);
 	// Common convention to take alpha from diffuse albedo.
 	litColor.a = 1/(pin.PosW.y/5);
+
+	float mg = noiseMap[int2(pin.PosW.x, pin.PosW.z)+int2(128, 128)].w;
+
+	mg = 1 - mg;
+
+	litColor = float4(mg, mg, mg, 1);
 
 	//return litColor;
 	return litColor;
