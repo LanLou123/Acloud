@@ -281,7 +281,7 @@ bool SimMain::Initialize()
 	mNoise = std::make_unique<UAVtex>(
 		md3dDevice.Get(),
 		mCommandList.Get(),
-		256, 256, 0.03f
+		1024, 1024, 0.03f
 		);
 
 	LoadTextures();
@@ -393,11 +393,11 @@ void SimMain::Draw(const GameTimer& gt)
 	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Transparent]);
 
 
-	//mCommandList->SetPipelineState(mPSOs["landPSO"].Get());
-	//DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Land]);
+	mCommandList->SetPipelineState(mPSOs["landPSO"].Get());
+	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Land]);
 
-	mCommandList->SetPipelineState(mPSOs["volPSO"].Get());
-	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::volume]);
+	//mCommandList->SetPipelineState(mPSOs["volPSO"].Get());
+	//DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::volume]);
 
 	// Indicate a state transition on the resource usage.
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
@@ -881,9 +881,12 @@ void SimMain::BuildShadersAndInputLayout()
 	mShaders["alphaTestedPS"] = d3dUtil::CompileShader(L"../Shaders/Default.hlsl", alphaTestDefines, "PS", "ps_5_0");
 	mShaders["landVs"] = d3dUtil::CompileShader(L"../Shaders/LandPsVs.hlsl", nullptr, "VS", "vs_5_0");
 	mShaders["landPs"] = d3dUtil::CompileShader(L"../Shaders/LandPsVs.hlsl", nullptr, "PS", "ps_5_0");
+	mShaders["landHS"] = d3dUtil::CompileShader(L"../Shaders/LandPsVs.hlsl", nullptr, "HS", "hs_5_0");
+	mShaders["landDS"] = d3dUtil::CompileShader(L"../Shaders/LandPsVs.hlsl", nullptr, "DS", "ds_5_0");
 	mShaders["volumeVS"] = d3dUtil::CompileShader(L"../Shaders/volPsVs.hlsl", nullptr, "VS", "vs_5_0");
 	mShaders["volumePS"] = d3dUtil::CompileShader(L"../Shaders/volPsVs.hlsl", nullptr, "PS", "ps_5_0");
 	mShaders["NoiseComp"] = d3dUtil::CompileShader(L"../Shaders/noiseComp.hlsl", nullptr, "noiseComp", "cs_5_0");
+
 
 	mInputLayout =
 	{
@@ -896,7 +899,7 @@ void SimMain::BuildShadersAndInputLayout()
 void SimMain::BuildLandGeometry()
 {
 	GeometryGenerator geoGen;
-	GeometryGenerator::MeshData grid = geoGen.CreateGrid(160.0f, 160.0f, 150, 150);
+	GeometryGenerator::MeshData grid = geoGen.CreateGrid(160.0f, 160.0f, 64, 64);
 
 	//
 	// Extract the vertex elements we are interested and apply the height function to
@@ -1171,12 +1174,22 @@ void SimMain::BuildPSOs()
 				reinterpret_cast<BYTE*>(mShaders["landPs"]->GetBufferPointer()),
 		mShaders["landPs"]->GetBufferSize()
 	};
+	landPsoDesc.HS = {
+		reinterpret_cast<BYTE*>(mShaders["landHS"]->GetBufferPointer()),
+		mShaders["landHS"]->GetBufferSize()
+	};
+	landPsoDesc.DS = {
+		reinterpret_cast<BYTE*>(mShaders["landDS"]->GetBufferPointer()),
+		mShaders["landDS"]->GetBufferSize()
+	};
 	landPsoDesc.VS =
 	{
 		reinterpret_cast<BYTE*>(mShaders["landVs"]->GetBufferPointer()),
 		mShaders["landVs"]->GetBufferSize()
 	};
+	landPsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
 	landPsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+	landPsoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH;
 	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&landPsoDesc, IID_PPV_ARGS(&mPSOs["landPSO"])));
 
 	//
@@ -1253,11 +1266,11 @@ void SimMain::BuildRenderItems()
 	auto gridRitem = std::make_unique<RenderItem>();
 	gridRitem->World = MathHelper::Identity4x4();
 	XMStoreFloat4x4(&gridRitem->TexTransform, XMMatrixScaling(5.0f, 5.0f, 1.0f));
-	XMStoreFloat4x4(&gridRitem->World, XMMatrixTranslation(0, -80, -0));
+	XMStoreFloat4x4(&gridRitem->World, XMMatrixTranslation(0, 0, -0));
 	gridRitem->ObjCBIndex = 0;
 	gridRitem->Mat = mMaterials["grass"].get();
 	gridRitem->Geo = mGeometries["landGeo"].get();
-	gridRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	gridRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST;
 	gridRitem->IndexCount = gridRitem->Geo->DrawArgs["grid"].IndexCount;
 	gridRitem->StartIndexLocation = gridRitem->Geo->DrawArgs["grid"].StartIndexLocation;
 	gridRitem->BaseVertexLocation = gridRitem->Geo->DrawArgs["grid"].BaseVertexLocation;

@@ -9,8 +9,8 @@ e:\newdx12project\dx12base\dxsim\simmain.cpp(97): warning C4305: 'initializing':
 e:\newdx12project\dx12base\dxsim\simmain.cpp(98): warning C4305: 'initializing': truncation from 'double' to 'float'
 e:\newdx12project\dx12base\dxsim\simmain.cpp(99): warning C4305: 'initializing': truncation from 'double' to 'float'
 e:\newdx12project\dx12base\dxsim\simmain.cpp(100): warning C4305: 'initializing': truncation from 'double' to 'float'
-e:\newdx12project\dx12base\dxsim\simmain.cpp(523): warning C4305: 'argument': truncation from 'double' to 'float'
 e:\newdx12project\dx12base\dxsim\simmain.cpp(524): warning C4305: 'argument': truncation from 'double' to 'float'
+e:\newdx12project\dx12base\dxsim\simmain.cpp(525): warning C4305: 'argument': truncation from 'double' to 'float'
 c:\program files (x86)\microsoft visual studio\2017\community\vc\tools\msvc\14.15.26726\include\memory(2539): warning C4244: 'argument': conversion from '_Ty' to 'int', possible loss of data
           with
           [
@@ -23,7 +23,7 @@ c:\program files (x86)\microsoft visual studio\2017\community\vc\tools\msvc\14.1
               T=ID3D12Device
           ]
   Generating code
-  1 of 3683 functions (<0.1%) were compiled, the rest were copied from previous compilation.
+  1 of 3693 functions (<0.1%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
     3 functions had inline decision re-evaluated but remain unchanged
   Finished generating code

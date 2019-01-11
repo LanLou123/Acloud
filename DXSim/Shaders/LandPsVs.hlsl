@@ -86,17 +86,16 @@ cbuffer cbMaterial : register(b2)
 struct VertexIn
 {
 	float3 PosL    : POSITION;
-	float3 NormalL : NORMAL;
-	float2 TexC    : TEXCOORD;
+
 };
 
 struct VertexOut
 {
-	float4 PosH    : SV_POSITION;
-	float3 PosW    : POSITION;
-	float3 NormalW : NORMAL;
-	float2 TexC    : TEXCOORD;
+	float3 PosL   : POSITION;
+	float3 norm : NORMAL;
 };
+
+
 
 //******************************
 //3d fbm noise
@@ -205,81 +204,107 @@ VertexOut VS(VertexIn vin)
 {
 	VertexOut vout = (VertexOut)0.0f;
 
-	// Transform to world space.
-	vin.PosL.y = 0;
+	//float h = finalFbm(float2(posW.x, posW.z) / 10) * 10;
 
-	float4 posW = mul(float4(vin.PosL, 1.0f), gWorld);
-	
+	vin.PosL.y = finalFbm(float2(vin.PosL.x, vin.PosL.z) / 10) * 20;
 
-	float h = finalFbm(float2(posW.x, posW.z)/10);
+	float l = finalFbm(float2(vin.PosL.x + 1, vin.PosL.z) / 10) * 20;
+	float r = finalFbm(float2(vin.PosL.x , vin.PosL.z + 1) / 10) * 20;
 
-	posW.y = 0;
+	float3 lvec = { vin.PosL.x + 1,l,vin.PosL.z };
+	float3 rvec = { vin.PosL.x,r,vin.PosL.z + 1 };
 
-	vout.PosW = posW.xyz;
-	// Assumes nonuniform scaling; otherwise, need to use inverse-transpose of world matrix.
-	vout.NormalW = mul(vin.NormalL, (float3x3)gWorld);
 
-	// Transform to homogeneous clip space.
-	vout.PosH = mul(posW, gViewProj);
-
-	// Output vertex attributes for interpolation across triangle.
-	float4 texC = mul(float4(vin.TexC, 0.0f, 1.0f), gTexTransform);
-	vout.TexC = mul(texC, gMatTransform).xy;
+	vout.PosL = vin.PosL;
+	vout.norm = -normalize(cross(lvec - vin.PosL, rvec - vin.PosL));
 
 	return vout;
 }
 
-float4 PS(VertexOut pin) : SV_Target
+
+struct PatchTess {
+	float EdgeTess[3] : SV_TessFactor;
+	float InsideTess[1] : SV_InsideTessFactor;
+};
+
+PatchTess ConstantHS(InputPatch<VertexOut, 3> patch, uint patchID: SV_PrimitiveID)
 {
-	float4 diffuseAlbedo = gDiffuseMap.Sample(gsamAnisotropicWrap, pin.TexC) * gDiffuseAlbedo;
+	PatchTess pt;
 
-#ifdef ALPHA_TEST
-	// Discard pixel if texture alpha < 0.1.  We do this test as soon 
-	// as possible in the shader so that we can potentially exit the
-	// shader early, thereby skipping the rest of the shader code.
-	clip(diffuseAlbedo.a - 0.1f);
-#endif
+	int tessout = 8;
 
-	// Interpolating normal can unnormalize it, so renormalize it.
-	pin.NormalW = normalize(pin.NormalW);
+	int tessin = 8;
 
-	// Vector from point being lit to eye. 
-	float3 toEyeW = gEyePosW - pin.PosW;
-	float distToEye = length(toEyeW);
-	toEyeW /= distToEye; // normalize
+	pt.EdgeTess[0] = tessout;
+	pt.EdgeTess[1] = tessout;
+	pt.EdgeTess[2] = tessout;
 
-	// Light terms.
-	float4 ambient = gAmbientLight * diffuseAlbedo;
+	pt.InsideTess[0] = tessin;
 
-	const float shininess = 1.0f - gRoughness;
-	Material mat = { diffuseAlbedo, gFresnelR0, shininess };
-	float3 shadowFactor = 1.0f;
-	float4 directLight = ComputeLighting(gLights, mat, pin.PosW,
-		pin.NormalW, toEyeW, shadowFactor);
+	return pt;
 
-	float4 litColor = ambient + directLight;
+}
 
-#ifdef FOG
-	float fogAmount = saturate((distToEye - gFogStart) / gFogRange);
-	litColor = lerp(litColor, gFogColor, fogAmount);
-#endif
-	//fbm part
+struct HullOut {
+	float3 PosL:POSITION;
+	float3 norm : NORMAL;
+};
 
-	float2 st = float2(pin.PosW.x, pin.PosW.z) / 10;
-	float f = finalFbm(st);
-	//fbm part
+[domain("tri")]
+[partitioning("integer")]
+[outputtopology("triangle_cw")]
+[outputcontrolpoints(3)]
+[patchconstantfunc("ConstantHS")]
+[maxtessfactor(64.0f)]
+HullOut HS(InputPatch<VertexOut, 3> p,
+	uint i: SV_outputControlPointID,
+	uint patchId : SV_PrimitiveID)
+{
+	HullOut hout;
+	hout.PosL = p[i].PosL;
+	hout.norm = p[i].norm;
+	return hout;
+}
 
-	litColor = float4(f, f, f, 1);
-	// Common convention to take alpha from diffuse albedo.
-	litColor.a = 1/(pin.PosW.y/5);
+struct DomainOut {
+	float4 PosH : SV_POSITION;
+	float3 norm : NORMAL;
+};
 
-	float mg = noiseMap[int2(pin.PosW.x, pin.PosW.z)+int2(128, 128)].w;
+[domain("tri")]
+DomainOut DS(PatchTess patchTess,
+	float3 uvw : SV_DomainLocation,
+	const OutputPatch<HullOut, 3> tri)
+{
+	DomainOut dout;
+	// barycentric interpolation
+	float3 newcoord = tri[0].PosL*uvw.x + tri[1].PosL*uvw.y + tri[2].PosL*uvw.z;
 
-	mg = 1 - mg;
+	float3 norm = tri[0].norm*uvw.x + tri[1].norm*uvw.y + tri[2].norm*uvw.z;
+	
+	float4 posW = mul(float4(newcoord, 1.0f), gWorld);
+	dout.PosH = mul(posW, gViewProj);
+	dout.norm = norm;
+	return dout;
 
-	litColor = float4(mg, mg, mg, 1);
+}
+
+
+float4 PS(DomainOut pin) : SV_Target
+{
+	
+
+
+	//test for noise
+	//float mg = noiseMap[(int2(pin.PosW.x*4, pin.PosW.z*4)+int2(320, 320))*1.].x;
+
+	//mg = 1 - mg;
+
+	//litColor = float4(mg, mg, mg, 1);
+	//test for noise
 
 	//return litColor;
+	float4 litColor={pin.norm.x,pin.norm.y,pin.norm.z,1.f};
 	return litColor;
 }
 

@@ -110,7 +110,9 @@ void UAVtex::Update(const GameTimer& gt,
 	cmdList->SetComputeRootSignature(mRootSig.Get());
 	if (t >= dt)
 	{
+		float curtime = gt.TotalTime();
 		cmdList->SetComputeRootDescriptorTable(0, mUavDescHandle);
+		cmdList->SetComputeRoot32BitConstants(1, 1, &curtime, 0);
 		cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
 			mUav.Get(),
 			D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS
@@ -135,11 +137,12 @@ void UAVtex::BuildRootSignature()
 	CD3DX12_DESCRIPTOR_RANGE uavTable0;
 	uavTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
 
-	CD3DX12_ROOT_PARAMETER slotRootParameter[1];
+	CD3DX12_ROOT_PARAMETER slotRootParameter[2];
 
 	slotRootParameter[0].InitAsDescriptorTable(1, &uavTable0);
+	slotRootParameter[1].InitAsConstants(1, 0);
 
-	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(1, slotRootParameter, 0, nullptr,
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(2, slotRootParameter, 0, nullptr,
 		D3D12_ROOT_SIGNATURE_FLAG_NONE);
 
 	ComPtr<ID3DBlob> serializedRootSig = nullptr;

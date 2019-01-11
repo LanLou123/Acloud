@@ -121,7 +121,13 @@ float hash(float n)
 float noisep(float3 x)
 {
 	// The noise function returns a value in the range -1.0f -> 1.0f
-
+	//test pw
+	float curx= abs(x.x + 128.f);
+	float curz = abs(x.z + 128.f);
+	if (curx > 256) curx = fmod(curx , 256.f);
+	if (curz > 256) curz = fmod(curz , 256.f);
+	float mgg = noiseMap[(int2(curx * 4, curz * 4) + int2(320, 320))*1.].x;
+	//test pw
 	x.x = x.x + 0.012*gTotalTime;
 	x.y = x.y + 0.034*gTotalTime;
 	x.z = x.z + 0.027*gTotalTime;
@@ -132,10 +138,12 @@ float noisep(float3 x)
 	f = f * f*(3.0 - 2.0*f);
 	float n = p.x + p.y*57.0 + 113.0*p.z ;
 
-	return lerp(lerp(lerp(hash(n + 0.0), hash(n + 1.0), f.x),
+	return
+		lerp(0, mgg, x.y<0?x.y:0);
+		/*lerp(lerp(lerp(hash(n + 0.0), hash(n + 1.0), f.x),
 		lerp(hash(n + 57.0), hash(n + 58.0), f.x), f.y),
 		lerp(lerp(hash(n + 113.0), hash(n + 114.0), f.x),
-			lerp(hash(n + 170.0), hash(n + 171.0), f.x), f.y), f.z);
+			lerp(hash(n + 170.0), hash(n + 171.0), f.x), f.y), f.z)/(0.3+mgg)*/
 }
 
 
@@ -883,7 +891,9 @@ float4 PS(VertexOut pin) : SV_Target
 	//iq cloud
 	float mg = noiseMap[int2(pin.PosW.x, pin.PosW.z) + int2(128, 128)].x;
 	mg = 1 - mg;
-	float4 acc =  render(gEyePosW/50, -toEyeW, pin.PosH.xy, 1);
+	
+	float od= gEyePosW / 10;
+	float4 acc =  render(gEyePosW / 40, -toEyeW, pin.PosH.xy, 1);
 	//iq cloud
 
 	//duke cloud
