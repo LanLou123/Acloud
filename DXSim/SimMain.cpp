@@ -98,6 +98,7 @@ public:
 	float densityFilter = 0.01;
 	float shadowDivider = 0.7;
 	float shadowMacherDis = 0.2;
+	int mtesslationCount = 4;
 
 	//cloud parameters
 private:
@@ -502,6 +503,7 @@ void SimMain::GUI()
 	static float gdensityFilter = densityFilter;
 	static float gshadowDivider = shadowDivider;
 	static float gshadowMacherDis = shadowMacherDis;
+	static int gtesslationCount = mtesslationCount;
 
 	ImGui::Begin("Cloud edit");                          // Create a window called "Hello, world!" and append into it.
 
@@ -526,6 +528,9 @@ void SimMain::GUI()
 	ImGui::SliderFloat("shadowDivider", &gshadowDivider, 0, 1);
 	ImGui::SliderFloat("shadowMacherDis", &gshadowMacherDis, 0, 1);
 
+	ImGui::Text("tesselation test");
+
+	ImGui::SliderInt("tesslation count", &gtesslationCount, 0, 10);
 
 														// Edit 1 float using a slider from 0.0f to 1.0f    
 	ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
@@ -538,54 +543,59 @@ void SimMain::GUI()
 		disLoc.x = locX;
 		dirtyData = true;
 	}
-	if (locY != disLoc.y)
+	else if (locY != disLoc.y)
 	{
 		disLoc.y = locY;
 		dirtyData = true;
 	}
-	if (sunx != sunDir.x)
+	else if (sunx != sunDir.x)
 	{
 		sunDir.x = sunx;
 		dirtyData = true;
 	}
-	if (suny != sunDir.y)
+	else if (suny != sunDir.y)
 	{
 		sunDir.y = suny;
 		dirtyData = true;
 	}
-	if (sunz != sunDir.z)
+	else if (sunz != sunDir.z)
 	{
 		sunDir.z = sunz;
 		dirtyData = true;
 	}
-	if (gmarchStep != marchStep)
+	else if (gmarchStep != marchStep)
 	{
 		marchStep = gmarchStep;
 		dirtyData = true;
 	}
-	if (gmaximumStepSize != maximumStepSize)
+	else if (gmaximumStepSize != maximumStepSize)
 	{
 		maximumStepSize = gmaximumStepSize;
 		dirtyData = true;
 	}
-	if (gstepMultiplier != stepMultiplier)
+	else if (gstepMultiplier != stepMultiplier)
 	{
 		stepMultiplier = gstepMultiplier;
 		dirtyData = true;
 	}
-	if (gdensityFilter != densityFilter)
+	else if (gdensityFilter != densityFilter)
 	{
 		densityFilter = gdensityFilter;
 		dirtyData = true;
 	}
-	if (gshadowDivider != shadowDivider)
+	else if (gshadowDivider != shadowDivider)
 	{
 		shadowDivider = gshadowDivider;
 		dirtyData = true;
 	}
-	if (gshadowMacherDis != shadowMacherDis)
+	else if (gshadowMacherDis != shadowMacherDis)
 	{
 		shadowMacherDis = gshadowMacherDis;
+		dirtyData = true;
+	}
+	else if (gtesslationCount != mtesslationCount)
+	{
+		mtesslationCount = gtesslationCount;
 		dirtyData = true;
 	}
 
@@ -727,6 +737,7 @@ void SimMain::UpdateMainPassCB(const GameTimer& gt)
 	mMainPassCB.densityFilter = densityFilter;
 	mMainPassCB.shadowDivider = shadowDivider;
 	mMainPassCB.shadowMacherDis = shadowMacherDis;
+	mMainPassCB.tesslationCount = mtesslationCount;
 
 	auto currPassCB = mCurrFrameResource->PassCB.get();
 	currPassCB->CopyData(0, mMainPassCB);
@@ -899,7 +910,7 @@ void SimMain::BuildShadersAndInputLayout()
 void SimMain::BuildLandGeometry()
 {
 	GeometryGenerator geoGen;
-	GeometryGenerator::MeshData grid = geoGen.CreateGrid(160.0f, 160.0f, 64, 64);
+	GeometryGenerator::MeshData grid = geoGen.CreateGridQuad(160.0f, 160.0f, 64, 64);
 
 	//
 	// Extract the vertex elements we are interested and apply the height function to
@@ -955,7 +966,7 @@ void SimMain::BuildLandGeometry()
 void SimMain::BuildClothGeometry()
 {
 	GeometryGenerator geoGen;
-	GeometryGenerator::MeshData grid = geoGen.CreateGrid(60.0f, 60.0f, 50, 50);
+	GeometryGenerator::MeshData grid = geoGen.CreateGridQuad(60.0f, 60.0f, 50, 50);
 
 	std::vector<Vertex> vertices(grid.Vertices.size());
 	for (size_t i = 0; i < grid.Vertices.size(); ++i)
@@ -1187,7 +1198,7 @@ void SimMain::BuildPSOs()
 		reinterpret_cast<BYTE*>(mShaders["landVs"]->GetBufferPointer()),
 		mShaders["landVs"]->GetBufferSize()
 	};
-	landPsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
+	//landPsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
 	landPsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
 	landPsoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH;
 	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&landPsoDesc, IID_PPV_ARGS(&mPSOs["landPSO"])));
@@ -1270,7 +1281,7 @@ void SimMain::BuildRenderItems()
 	gridRitem->ObjCBIndex = 0;
 	gridRitem->Mat = mMaterials["grass"].get();
 	gridRitem->Geo = mGeometries["landGeo"].get();
-	gridRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST;
+	gridRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_4_CONTROL_POINT_PATCHLIST;
 	gridRitem->IndexCount = gridRitem->Geo->DrawArgs["grid"].IndexCount;
 	gridRitem->StartIndexLocation = gridRitem->Geo->DrawArgs["grid"].StartIndexLocation;
 	gridRitem->BaseVertexLocation = gridRitem->Geo->DrawArgs["grid"].BaseVertexLocation;

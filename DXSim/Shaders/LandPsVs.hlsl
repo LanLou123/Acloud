@@ -73,6 +73,17 @@ cbuffer cbPass : register(b1)
 	// indices [NUM_DIR_LIGHTS+NUM_POINT_LIGHTS, NUM_DIR_LIGHTS+NUM_POINT_LIGHT+NUM_SPOT_LIGHTS)
 	// are spot lights for a maximum of MaxLights per object.
 	Light gLights[MaxLights];
+	float3 boxcenter;
+	float boxL;
+	float3 sunDir;
+
+	float marchStep;
+	float maximumStepSize;
+	float stepMultiplier;
+	float densityFilter;
+	float shadowDivider;
+	float shadowMacherDis;
+	int tesselationCount;
 };
 
 cbuffer cbMaterial : register(b2)
@@ -92,7 +103,6 @@ struct VertexIn
 struct VertexOut
 {
 	float3 PosL   : POSITION;
-	float3 norm : NORMAL;
 };
 
 
@@ -206,40 +216,35 @@ VertexOut VS(VertexIn vin)
 
 	//float h = finalFbm(float2(posW.x, posW.z) / 10) * 10;
 
-	vin.PosL.y = finalFbm(float2(vin.PosL.x, vin.PosL.z) / 10) * 20;
-
-	float l = finalFbm(float2(vin.PosL.x + 1, vin.PosL.z) / 10) * 20;
-	float r = finalFbm(float2(vin.PosL.x , vin.PosL.z + 1) / 10) * 20;
-
-	float3 lvec = { vin.PosL.x + 1,l,vin.PosL.z };
-	float3 rvec = { vin.PosL.x,r,vin.PosL.z + 1 };
-
+	vin.PosL.y = 0;
 
 	vout.PosL = vin.PosL;
-	vout.norm = -normalize(cross(lvec - vin.PosL, rvec - vin.PosL));
+
 
 	return vout;
 }
 
 
 struct PatchTess {
-	float EdgeTess[3] : SV_TessFactor;
-	float InsideTess[1] : SV_InsideTessFactor;
+	float EdgeTess[4] : SV_TessFactor;
+	float InsideTess[2] : SV_InsideTessFactor;
 };
 
-PatchTess ConstantHS(InputPatch<VertexOut, 3> patch, uint patchID: SV_PrimitiveID)
+PatchTess ConstantHS(InputPatch<VertexOut, 4> patch, uint patchID: SV_PrimitiveID)
 {
 	PatchTess pt;
 
-	int tessout = 8;
+	int tessout = tesselationCount;
 
-	int tessin = 8;
+	int tessin = tesselationCount;
 
 	pt.EdgeTess[0] = tessout;
 	pt.EdgeTess[1] = tessout;
 	pt.EdgeTess[2] = tessout;
+	pt.EdgeTess[3] = tessout;
 
 	pt.InsideTess[0] = tessin;
+	pt.InsideTess[1] = tessin;
 
 	return pt;
 
@@ -247,22 +252,20 @@ PatchTess ConstantHS(InputPatch<VertexOut, 3> patch, uint patchID: SV_PrimitiveI
 
 struct HullOut {
 	float3 PosL:POSITION;
-	float3 norm : NORMAL;
 };
 
-[domain("tri")]
+[domain("quad")]
 [partitioning("integer")]
 [outputtopology("triangle_cw")]
-[outputcontrolpoints(3)]
+[outputcontrolpoints(4)]
 [patchconstantfunc("ConstantHS")]
 [maxtessfactor(64.0f)]
-HullOut HS(InputPatch<VertexOut, 3> p,
+HullOut HS(InputPatch<VertexOut, 4> p,
 	uint i: SV_outputControlPointID,
 	uint patchId : SV_PrimitiveID)
 {
 	HullOut hout;
 	hout.PosL = p[i].PosL;
-	hout.norm = p[i].norm;
 	return hout;
 }
 
@@ -271,18 +274,26 @@ struct DomainOut {
 	float3 norm : NORMAL;
 };
 
-[domain("tri")]
+[domain("quad")]
 DomainOut DS(PatchTess patchTess,
-	float3 uvw : SV_DomainLocation,
-	const OutputPatch<HullOut, 3> tri)
+	float2 uv : SV_DomainLocation,
+	const OutputPatch<HullOut, 4> quad)
 {
 	DomainOut dout;
 	// barycentric interpolation
-	float3 newcoord = tri[0].PosL*uvw.x + tri[1].PosL*uvw.y + tri[2].PosL*uvw.z;
+	float3 v1 = lerp(quad[0].PosL, quad[1].PosL, uv.x);
+	float3 v2 = lerp(quad[2].PosL, quad[3].PosL, uv.x);
+	float3 p = lerp(v1, v2, uv.y);
 
-	float3 norm = tri[0].norm*uvw.x + tri[1].norm*uvw.y + tri[2].norm*uvw.z;
+	p.y = finalFbm(float2(p.x, p.z) / 10) * 20;
+
+	float l = finalFbm(float2(p.x + 1, p.z) / 10) * 20;
+	float r = finalFbm(float2(p.x, p.z + 1) / 10) * 20;
+
+	float3 norm = normalize(cross( p - float3(p.x, r, p.z+1),p - float3(p.x+1, l, p.z)));
 	
-	float4 posW = mul(float4(newcoord, 1.0f), gWorld);
+	float4 posW = mul(float4(p, 1.0f), gWorld);
+	norm = mul(norm, (float3x3)gWorld);
 	dout.PosH = mul(posW, gViewProj);
 	dout.norm = norm;
 	return dout;

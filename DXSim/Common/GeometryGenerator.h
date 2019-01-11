@@ -104,7 +104,7 @@ public:
 	/// at the origin with the specified width and depth.
 	///</summary>
     MeshData CreateGrid(float width, float depth, uint32 m, uint32 n);
-
+	MeshData CreateGridQuad(float width, float depth, uint32 m, uint32 n);
 	///<summary>
 	/// Creates a quad aligned with the screen.  This is useful for postprocessing and screen effects.
 	///</summary>

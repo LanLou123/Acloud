@@ -51,6 +51,7 @@ struct PassConstants
 	float densityFilter = 0.01;
 	float shadowDivider = 0.7;
 	float shadowMacherDis = 0.2;
+	int tesslationCount = 4;
 };
 
 struct Vertex
